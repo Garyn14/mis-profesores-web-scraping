@@ -1,0 +1,54 @@
+# ➤ virtual environment
+.venv/
+venv/
+ENV/
+env/
+__pypackages__/
+
+# ➤ IDE files
+.idea/
+
+# ➤ python files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg
+*.egg-info/
+dist/
+build/
+*.manifest
+*.spec
+
+# ➤ Logs
+*.log
+*.tmp
+*.swp
+*.bak
+
+# ➤ variables
+.env
+.env.*
+
+# ➤ database
+*.sqlite3
+*.db
+*.tgz
+
+# ➤ Jupyter notebooks
+.ipynb_checkpoints/
+
+# ➤ test files
+coverage.xml
+htmlcov/
+.tox/
+.cache/
+pytest_cache/
+nosetests.xml
+*.cover
+*.pytest_cache/
+
+# ➤ another
+.DS_Store
+Thumbs.db
