@@ -3,14 +3,14 @@ from bs4 import BeautifulSoup
 import json
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional
 from app.core.config import settings
-from app.core.logger import logger
+from app.utils.logger import logger
+from app.utils.request_utils import safe_request
 
 
 def replace_latin_chars(s: str) -> str:
-    """Normaliza caracteres especiales del español."""
+    """Normaliza caracteres latinos"""
     translate = {
         "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U", "Ñ": "N", "Ü": "U",
         "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ñ": "n", "ü": "u"
@@ -19,37 +19,20 @@ def replace_latin_chars(s: str) -> str:
 
 
 def clean_string_for_url(s: str) -> str:
-    """Limpia y formatea strings para URLs."""
+    """Limpia formato para URL"""
     s = replace_latin_chars(s)
     s = re.sub(r'[^a-zA-Z0-9\s-]', '', s)
     s = re.sub(r'[\s-]+', '-', s.strip())
     return s.lower()
 
 
-def safe_request(url: str, retries: int = 3) -> Optional[requests.Response]:
-    """Maneja requests con reintentos y delays."""
-    for attempt in range(retries):
-        try:
-            logger.debug(f"🔍 Intentando request a {url} (intento {attempt + 1}/{retries})")
-            response = requests.get(url, headers=settings.REQUEST_HEADERS)
-            response.raise_for_status()
-            logger.debug("✅ Request exitoso")
-            return response
-        except requests.RequestException as e:
-            logger.warning(f"⚠️ Request fallido (intento {attempt + 1}/{retries}): {e}")
-            if attempt < retries - 1:
-                time.sleep((attempt + 1) * 1)
-    logger.error(f"❌ Todos los intentos fallaron para {url}")
-    return None
-
-
 def extract_professors_data(soup: BeautifulSoup) -> Optional[List[Dict]]:
-    """Extrae el dataset de profesores del script JavaScript."""
-    logger.info("🔎 Buscando datos de profesores en el HTML")
+    """Extrae datos de profesores de la página"""
+    logger.debug("🔎 Buscando datos de profesores en el HTML")
     for script in soup.find_all('script'):
         if script.string and 'var dataSet =' in script.string:
             logger.debug("📦 Script con dataSet encontrado")
-            match = re.search(r'var dataSet\s*=\s*(\[\{.*?\}\]);', script.string, re.DOTALL)
+            match = re.search(r'var dataSet\s*=\s*(\[\{.*?}]);', script.string, re.DOTALL)
             if match:
                 try:
                     data = json.loads(match.group(1))
@@ -61,8 +44,8 @@ def extract_professors_data(soup: BeautifulSoup) -> Optional[List[Dict]]:
     return None
 
 
-def scrape_university_professors(university_url: str = settings.UNIVERSITY_URL) -> List[Dict]:
-    """Función principal de scraping con logging detallado."""
+async def scrape_university_professors(university_url: str = settings.UNIVERSITY_URL) -> List[Dict]:
+    """Realiza el scraping de los profesores con seguimiento de progreso"""
     logger.info(f"🚀 Iniciando scraping para: {university_url}")
     start_time = time.time()
 
@@ -81,9 +64,10 @@ def scrape_university_professors(university_url: str = settings.UNIVERSITY_URL) 
             return []
 
         # Paso 2: Procesar datos básicos
-        logger.info("🔄 Procesando datos de profesores...")
-        professors = []
         total_professors = len(raw_data)
+        professors = []
+
+        logger.info(f"🔧 Transformando {total_professors} registros...")
 
         for i, prof in enumerate(raw_data, 1):
             try:
@@ -104,17 +88,16 @@ def scrape_university_professors(university_url: str = settings.UNIVERSITY_URL) 
                 }
                 professors.append(professor_data)
 
-                # Log cada 10 profesores o al final
-                if i % 10 == 0 or i == total_professors:
-                    logger.info(f"⏳ Progreso: {i}/{total_professors} profesores procesados")
+                # Mostrar progreso cada 25 registros o al final
+                if i % 25 == 0 or i == total_professors:
+                    logger.progress(i, total_professors, prefix="Scraping:", suffix=f"{i}/{total_professors}")
 
             except Exception as e:
-                logger.error(f"❌ Error procesando profesor {i}: {e}")
+                logger.warning(f"⚠️ Error procesando profesor {i}: {e}")
                 continue
 
         elapsed_time = time.time() - start_time
-        logger.info(f"✅ Scraping completado en {elapsed_time:.2f} segundos")
-        logger.info(f"📈 Total de profesores obtenidos: {len(professors)}")
+        logger.success(f"🎉 Scraping completado en {elapsed_time:.2f} segundos | Total: {len(professors)} registros")
 
         return professors
 

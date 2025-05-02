@@ -5,13 +5,11 @@ from .profesores import (
     ProfessorResponse,
     ProfessorDetail
 )
-from .universidades import UniversityResponse
 
 __all__ = [
     "ProfessorBase",
     "ProfessorStats",
     "ProfessorComment",
     "ProfessorResponse",
-    "ProfessorDetail",
-    "UniversityResponse"
+    "ProfessorDetail"
 ]

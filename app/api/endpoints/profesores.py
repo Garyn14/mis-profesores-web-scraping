@@ -1,54 +1,50 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List, Optional
+from typing import List
 from app.services.scraping_service import (
     get_professors_data,
-    refresh_professors_data,
-    get_professor_by_id
+    refresh_professors_data
 )
-from app.api.schemas.profesores import (
-    ProfessorResponse,
-    ProfessorDetail
-)
-from app.api.dependencies import verify_token
+from app.api.schemas.profesores import ProfessorResponse
+from app.utils.logger import logger
 
 router = APIRouter(prefix="/profesores", tags=["profesores"])
 
-@router.get("/", response_model=List[ProfessorResponse])
+@router.get("/all", response_model=List[ProfessorResponse])
+async def get_all_professors():
+    """Obtiene todos los profesores (sin paginación)"""
+    logger.info("📦 Solicitud GET /all - Iniciando...")
+    try:
+        data = await get_professors_data()
+        logger.success(f"✅ GET /all completado | {len(data)} registros")
+        return data
+    except Exception as e:
+        logger.error(f"❌ GET /all falló: {str(e)}")
+        raise HTTPException(500, "Error interno al obtener datos")
+
+@router.get("", response_model=List[ProfessorResponse])
 async def list_professors(
-    limit: Optional[int] = Query(100, ge=1, le=1000),
-    offset: Optional[int] = Query(0, ge=0)
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0)
 ):
-    """Obtiene todos los profesores con paginación"""
-    professors = await get_professors_data()
-    return professors[offset:offset + limit]
+    """Lista paginada de profesores"""
+    logger.info(f"🔍 Solicitud GET / | Paginación: offset={offset}, limit={limit}")
+    try:
+        professors = await get_professors_data()
+        result = professors[offset:offset + limit]
+        logger.info(f"📊 Página {offset//limit + 1} entregada | {len(result)} items")
+        return result
+    except Exception as e:
+        logger.error(f"❌ GET / falló: {str(e)}")
+        raise HTTPException(500, "Error en paginación")
 
-@router.get("/search", response_model=List[ProfessorResponse])
-async def search_professors(
-    query: str = Query(..., min_length=2, max_length=50),
-    limit: Optional[int] = Query(10, ge=1, le=50)
-):
-    """Busca profesores por nombre o facultad"""
-    professors = await get_professors_data()
-    results = [
-        p for p in professors
-        if query.lower() in p.name.lower() or
-           query.lower() in p.faculty.lower()
-    ]
-    return results[:limit]
-
-@router.get("/{professor_id}", response_model=ProfessorDetail)
-async def get_professor(professor_id: str):
-    """Obtiene un profesor específico por ID con todos sus detalles"""
-    professor = await get_professor_by_id(professor_id)
-    if not professor:
-        raise HTTPException(
-            status_code=404,
-            detail="Professor not found"
-        )
-    return professor
-
-@router.post("/refresh", dependencies=[Depends(verify_token)])
+@router.post("/refresh")
 async def refresh_data():
-    """Fuerza la actualización de los datos (requiere autenticación)"""
-    await refresh_professors_data()
-    return {"status": "data refreshed"}
+    """Forzar actualización de datos"""
+    logger.warning("♻️ Solicitud POST /refresh - Reiniciando caché...")
+    try:
+        await refresh_professors_data()
+        logger.success("🔄 Datos refrescados exitosamente")
+        return {"status": "data refreshed"}
+    except Exception as e:
+        logger.error(f"💥 POST /refresh falló: {str(e)}")
+        raise HTTPException(500, "Error al refrescar datos")

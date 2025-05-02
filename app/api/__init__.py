@@ -1,3 +1,3 @@
-from .endpoints import profesores, universidades
+from .endpoints import profesores
 
-__all__ = ["profesores", "universidades"]
+__all__ = ["profesores"]

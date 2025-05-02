@@ -1,35 +1,68 @@
-from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Dict
 from cachetools import cached, TTLCache
-from app.utils.scraping_utils import scrape_university_professors
-from app.api.schemas.profesores import ProfessorResponse, ProfessorDetail
+from datetime import datetime
+from app.api.schemas.profesores import ProfessorResponse
 from app.core.config import settings
+from app.utils.scraping_utils import scrape_university_professors
+from app.utils.logger import logger
 
-# Cache de 1 hora (configurable en .env)
 cache = TTLCache(maxsize=1, ttl=settings.CACHE_TTL)
+
 
 @cached(cache)
 async def get_raw_professors_data() -> List[Dict]:
     """Obtiene datos crudos con caché"""
-    return scrape_university_professors(settings.UNIVERSITY_URL)
+    logger.debug("🔍 Buscando en caché o scraping nuevo...")
+    try:
+        data = await scrape_university_professors(settings.UNIVERSITY_URL)
+        logger.info(f"📦 Datos crudos obtenidos: {len(data)} registros")
+        return data
+    except Exception as e:
+        logger.error(f"❌ Fallo en get_raw_professors_data: {str(e)}")
+        raise
+
 
 async def get_professors_data() -> List[ProfessorResponse]:
-    """Obtiene datos procesados de todos los profesores"""
-    raw_data = await get_raw_professors_data()
-    return [ProfessorResponse(**prof) for prof in raw_data]
+    """Transforma datos y muestra progreso"""
+    logger.info("🔄 Procesando datos...")
+    start_time = datetime.now()
 
-async def get_professor_by_id(professor_id: str) -> Optional[ProfessorDetail]:
-    """Obtiene un profesor específico con todos sus detalles"""
-    raw_data = await get_raw_professors_data()
-    for prof in raw_data:
-        if prof["id"] == professor_id:
-            return ProfessorDetail(
-                **prof,
-                last_updated=datetime.now()
-            )
-    return None
+    try:
+        raw_data = await get_raw_professors_data()
+        if not raw_data:
+            logger.warning("⚠️ No se obtuvieron datos para procesar")
+            return []
+
+        total = len(raw_data)
+        processed = []
+
+        # Mostrar barra de progreso solo una vez
+        logger.info(f"📊 Procesando {total} profesores...")
+
+        for i, prof in enumerate(raw_data, 1):
+            try:
+                processed.append(ProfessorResponse(**prof))
+                # Mostrar progreso cada 20 registros o al final
+                if i % 20 == 0 or i == total:
+                    logger.progress(i, total, prefix="Progreso:", suffix=f"{i}/{total}")
+            except Exception as e:
+                logger.warning(f"⚠️ Error en registro {i}: {str(e)}")
+                continue
+
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.success(f"✅ Procesamiento completado: {len(processed)}/{total} registros en {elapsed:.2f}s")
+        return processed
+    except Exception as e:
+        logger.error(f"💥 Error crítico en get_professors_data: {str(e)}")
+        raise
+
 
 async def refresh_professors_data() -> List[ProfessorResponse]:
-    """Fuerza la actualización de los datos (limpia la caché)"""
-    cache.clear()
-    return await get_professors_data()
+    """Limpia caché y recarga datos"""
+    logger.warning("♻️ Limpiando caché y forzando rescrapeo...")
+    try:
+        cache.clear()
+        return await get_professors_data()
+    except Exception as e:
+        logger.error(f"💥 Error al refrescar datos: {str(e)}")
+        raise

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
     BASE_URL: str = "https://peru.misprofesores.com"
+    ALLOWED_ORIGINS: str = "http://localhost:8080"
 
     class Config:
         env_file = ".env"
